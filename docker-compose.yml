@@ -1,0 +1,86 @@
+services:
+
+# ****************************************************************
+# Servicio de Lemonade-server.ai - Engine de LLM con soporte de AMD
+# ****************************************************************
+  lemonade:
+      build:
+        context: .
+        dockerfile: ./build/Dockerfile
+      container_name: lemonade-server-v2
+      restart: unless-stopped
+      environment:
+        #- LLAMA_ARG_PORT=${LLAMACPP_GUEST_PORT}
+          #- HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}
+          #- GABGPT_GUEST_MODELS_FOLDER=${GABGPT_GUEST_MODELS_FOLDER}
+        #- LEMONADE_HOST=127.0.0.1
+        #- LEMONADE_PORT=13305
+        #- LEMONADE_API_KEY=your-api-key-here
+        - LEMONADE_LLAMACPP=rocm
+        - LEMONADE_LLAMACPP_DEVICE=ROCm0
+        - LEMONADE_LLAMACPP_ARGS=""
+          # Permite el acceso a los logs via web de ips fuera de localhost
+          #- LEMONADE_ALLOWED_NETWORKS=192.168.178.0/24
+          #- LEMONADE_ALLOW_REMOTE_INTERNAL=true
+          #- LEMONADE_CORS_ALLOWED_ORIGINS=*
+        - XDG_RUNTIME_DIR=/tmp/
+          #- XDG_CACHE_HOME=/app/lemonade/persistencia/.cache
+        - XDG_CACHE_HOME=/app/lemonade/.cache
+          #- XDG_DATA_HOME=/app/lemonade/built_in/.data
+        - LEMONADE_CACHE_DIR=/app/lemonade/.cache
+          #- HF_HOME=/app/lemonade/built_in/.cache/huggingface
+        - HF_HOME=/app/lemonade/models
+          #/app/lemonade/models
+          #- HSA_OVERRIDE_GFX_VERSION=12.0.0
+          #- HSA_OVERRIDE_GFX_VERSION=11.5.0
+        #- HIP_VISIBLE_DEVICES=0
+          #- FLM_CONFIG_PATH=/app/fastflowlm/share/flm/model_list.json
+        - FLM_CONFIG_PATH=/app/fastflowlm/share/flm/model_list.json
+        - FLM_XCLBIN_PATH=/app/fastflowlm/share/flm/xclbins/
+          #- ROCM_PATH=/opt/rocm
+ #        - LD_LIBRARY_PATH=/opt/rocm/lib
+        # Agregamos la ruta de lemonade al path
+        #- PATH=/app/lemonade:$$PATH
+        #- LEMONADE_ROCM_ARCH=120001
+        - LEMONADE_ROCM_ARCH=gfx1150
+      #env_file:
+        #- ./engines/lemonade-server/.env.llama
+      devices:
+        - "/dev/kfd:/dev/kfd"
+        - "/dev/dri:/dev/dri"
+        - "/dev/accel/accel0:/dev/accel/accel0"
+          #group_add:
+        #- video                  # Permisos para acceder al hardware de video
+          #- render
+          #  - "109"
+      ipc : host      # Optimizacion: Comparte el espacio de memoria interproceso con el host. El contenedor puede acceder a recursos del host como semaforos, memoria compartida...
+      shm_size: '16gb'    # Optimizacion: Define el tamaño de la memoria compartida. Los procesos comparten memoria directamente en la memoria, sin tener que copiarlos.
+      privileged: true
+      security_opt:
+        - apparmor:unconfined
+          #@        - seccomp:unconfined     # A veces necesario para ROCm
+      ports:
+        - 13305:13305
+        - 9000:9000
+      volumes:
+        #- /mnt/datos/lemonade/cache:/app/lemonade/persistencia/.cache
+          # Ahora el disco duro externo solo almacena los modelos, evitando problemas de permisos con ejecutables
+          #- /mnt/datos/lemonade/models:/app/lemonade/persistencia/huggingface
+        # Mantenemos los backends instalados en caliente a salvo
+        #  Vigila!!! la unidad donde se  configure debe estar montada ( fstab ) con el falg exec.
+        #- /mnt/datos/lemonade/backends_data:/app/lemonade/built_in/.data
+        - /mnt/datos/lemonade/models:/app/lemonade/models/
+        - /mnt/datos/lemonade/.cache:/app/lemonade/.cache
+          #- /mnt/datos/lemonade/cfg:/app/lemonade/cfg
+          # - /mnt/datos/lemonade/xdg:/app/lemonade/xdg
+          #- /mnt/datos/lemonade/xdg:/app/lemonade/
+          #- /mnt/datos/lemonade/llama:/app/lemonade/llama
+          #- /mnt/datos/lemonade/models:/root/.cache/lm-studio/models
+          #- /mnt/datos/lemonade/recipes:/app/lemonade/.cache/recipes
+      #entrypoint: ["/bin/bash", "-c"]
+      networks:
+        - app_network
+
+networks:
+  app_network:
+    driver: bridge
