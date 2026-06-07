@@ -1,3 +1,6 @@
 [submodule "lemonade"]
 	path = lemonade
 	url = https://github.com/GabrielReusRodriguez/lemonade.git
+[submodule "FastFlowLM"]
+	path = FastFlowLM
+	url = https://github.com/FastFlowLM/FastFlowLM.git

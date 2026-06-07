@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     git \
+    libdrm-dev \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -35,7 +36,7 @@ WORKDIR /app/lemonade
 #    cmake --build . --config Release -j"$(nproc)"
 
 # Ejecuto el script que se encarga de las dependencias y le paso CI = true  par que asuma que le digo que si a todo.
-RUN CI=true ./setup.sh
+#RUN CI=true ./setup.sh
 
 RUN mkdir -p build
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -51,6 +52,97 @@ RUN echo "=== Build directory contents ===" && \
 # # 2. FastFlowLLM  builder- 
 # # ============================================================
 
+FROM ubuntu:24.04 AS fastflowlm_builder
+
+# Basado en el Dockerfile del repositorio oficial https://github.com/FastFlowLM/FastFlowLM.git
+# Primero instalo las dependencias.
+LABEL org.opencontainers.image.description="FastFlowLM build environment with all dependencies pre-installed"
+LABEL org.opencontainers.image.source="https://github.com/FastFlowLM/FastFlowLM"
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+ARG UBUNTU_PPA=""
+ARG BACKPORTS=""
+
+# Set up PPA if needed
+RUN if [ -n "$UBUNTU_PPA" ]; then \
+        apt update && apt install -y software-properties-common && \
+        add-apt-repository -y "$UBUNTU_PPA"; \
+    fi
+
+# setup backports if needed
+RUN if [ -n "$BACKPORTS" ]; then \
+        echo "deb http://deb.debian.org/debian $BACKPORTS main" >> /etc/apt/sources.list; \
+        apt update; \
+        apt install -t $BACKPORTS -y libxrt-dev; \
+    fi
+
+# Install all build dependencies
+RUN apt update && apt install -y  \
+    build-essential \
+    cargo \
+    cmake \
+    debhelper-compat \
+    dpkg-dev \
+    fakeroot \
+    git \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libboost-dev \
+    libboost-program-options-dev \
+    libcurl4-openssl-dev \
+    libdrm-dev \
+    libfftw3-dev \
+    libreadline-dev \
+    libswresample-dev \
+    libswscale-dev \
+    nasm \
+    ninja-build \
+    patchelf \
+    pkg-config \
+    uuid-dev \
+    curl \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN add-apt-repository ppa:lemonade-team/stable
+RUN apt update
+RUN apt install -y libxrt-dev libxrt-npu2 amdxdna-dkms
+
+
+# 2. Corregir enlace simbólico (limpio, apuntando al directorio raíz de cabeceras)
+#RUN mkdir -p /opt/xilinx/xrt && \
+#    ln -s /usr/include /opt/xilinx/xrt/include
+
+# Necesito el restc 1.85 y los repositorios de apt tienen hasta el 1.75 asi que lo instalo por separado.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y && \
+    . "$HOME/.cargo/env" && \
+    rustup toolchain install 1.85 && \
+    rustup default 1.85
+
+
+WORKDIR /app
+
+# Ahora voy a compilarlo.
+
+# Clonamos el repositorio.
+#RUN git clone --depth 1 --recursive --single-branch https://github.com/FastFlowLM/FastFlowLM.git
+COPY ./FastFlowLM/ /app/FastFlowLM
+WORKDIR /app/FastFlowLM/src
+
+# Configuramos la compilacion
+# Con --preset linux-default, se instalará en /opt/fastflolm
+#RUN cmake --preset linux-default -DXRT_INCLUDE_DIR=/opt/xilinx/xrt/include
+#RUN cmake --preset linux-default -DXRT_INCLUDE_DIR=/usr/include/xrt/ 
+#RUN cmake --preset linux-default -DXRT_INCLUDE_DIR=/usr/include/xrt/ -DCMAKE_CXX_FLAGS="-I/usr/include/"
+RUN cmake --preset linux-default
+
+# Compilo
+RUN cmake --build build -j$(nproc)
+
+# OPCIONAL:  instalamos el proyecto
+RUN cmake --install build
 
 
 # # ============================================================
@@ -132,8 +224,8 @@ RUN apt install -y \
 
 
 # Copiamos la compilacion de FastFlowLM
-#COPY --from=fastflowlm_builder /opt/fastflowlm /app/fastflowlm
-#RUN ln -s /app/fastflowlm/bin/flm /usr/local/bin/flm
+COPY --from=fastflowlm_builder /opt/fastflowlm /app/fastflowlm
+RUN ln -s /app/fastflowlm/bin/flm /usr/local/bin/flm
 # Configuramos lemonade con los backends necesarios.
 
 # --- TRUCO DE PRE-DESCARGA ---

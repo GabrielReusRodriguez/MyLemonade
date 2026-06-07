@@ -3,11 +3,11 @@ services:
 # ****************************************************************
 # Servicio de Lemonade-server.ai - Engine de LLM con soporte de AMD
 # ****************************************************************
-  lemonade:
+  mylemonade:
       build:
         context: .
-        dockerfile: ./build/Dockerfile
-      container_name: lemonade-server-v2
+        dockerfile: Dockerfile
+      container_name: mylemonade
       restart: unless-stopped
       environment:
         #- LLAMA_ARG_PORT=${LLAMACPP_GUEST_PORT}
